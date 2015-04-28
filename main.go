@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/badgerodon/net/socketmaster/server"
+	"github.com/badgerodon/socketmaster/server"
 )
 
 var (
