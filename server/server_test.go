@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/badgerodon/net/socketmaster/client"
-	"github.com/badgerodon/net/socketmaster/protocol"
+	"github.com/badgerodon/socketmaster/client"
+	"github.com/badgerodon/socketmaster/protocol"
 	"github.com/hashicorp/yamux"
 )
 
@@ -186,7 +186,7 @@ func TestHTTP(t *testing.T) {
 	defer s.Close()
 	go s.Serve()
 
-	c1, err := client.Listen(li1.Addr().String(), protocol.SocketDefinition{
+	c1, err := client.New(li1.Addr().String()).Listen(protocol.SocketDefinition{
 		Address: "127.0.0.1",
 		Port:    8999,
 		HTTP: &protocol.SocketHTTPDefinition{
@@ -204,7 +204,7 @@ func TestHTTP(t *testing.T) {
 		io.WriteString(res, "a")
 	}))
 
-	c2, err := client.Listen(li1.Addr().String(), protocol.SocketDefinition{
+	c2, err := client.New(li1.Addr().String()).Listen(protocol.SocketDefinition{
 		Address: "127.0.0.1",
 		Port:    8999,
 		HTTP: &protocol.SocketHTTPDefinition{
@@ -248,7 +248,7 @@ func TestTLS(t *testing.T) {
 	defer s.Close()
 	go s.Serve()
 
-	c1, err := client.Listen(li1.Addr().String(), protocol.SocketDefinition{
+	c1, err := client.New(li1.Addr().String()).Listen(protocol.SocketDefinition{
 		Address: "127.0.0.1",
 		Port:    8999,
 		HTTP: &protocol.SocketHTTPDefinition{

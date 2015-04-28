@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/badgerodon/net/socketmaster/protocol"
+	"github.com/badgerodon/socketmaster/protocol"
 	"github.com/hashicorp/yamux"
 )
 
