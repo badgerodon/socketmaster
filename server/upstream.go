@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/http"
 	"strings"
@@ -47,7 +48,19 @@ func (u *upstreamListener) closeDownstream(id int64) {
 	u.update()
 }
 
-func (u *upstreamListener) findDownstream(req *http.Request) *downstreamConnection {
+func (u *upstreamListener) getDownstream() []*downstreamConnection {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+
+	ds := make([]*downstreamConnection, 0, len(u.downstream))
+	for _, d := range u.downstream {
+		ds = append(ds, d)
+	}
+
+	return ds
+}
+
+func (u *upstreamListener) findDownstreamHTTP(req *http.Request) *downstreamConnection {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
@@ -82,7 +95,7 @@ func (u *upstreamListener) routeHTTP(conn net.Conn) {
 
 		deadline := time.Now().Add(time.Second * 30)
 		for {
-			d := u.findDownstream(req)
+			d := u.findDownstreamHTTP(req)
 			if d == nil {
 				if time.Now().After(deadline) {
 					msg := "Not Found"
@@ -138,60 +151,80 @@ func (u *upstreamListener) routeHTTP(conn net.Conn) {
 	}
 }
 
+func (u *upstreamListener) routeTCP(conn net.Conn) {
+	var stream *yamux.Stream
+	var err error
+
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		ds := u.getDownstream()
+		if len(ds) == 0 {
+			if time.Now().After(deadline) {
+				conn.Close()
+				return
+			} else {
+				time.Sleep(time.Millisecond * 100)
+				continue
+			}
+		}
+		d := ds[rand.Intn(len(ds))]
+		stream, err = d.session.OpenStream()
+		if err != nil {
+			u.server.config.Logger.Printf("failed to open stream: %v\n", err)
+			d.session.Close()
+			u.mu.Lock()
+			delete(u.downstream, d.id)
+			u.mu.Unlock()
+			u.update()
+			continue
+		}
+		break
+	}
+
+	go func() {
+		signal := make(chan struct{}, 2)
+		go func() {
+			io.Copy(stream, conn)
+			signal <- struct{}{}
+		}()
+		go func() {
+			io.Copy(conn, stream)
+			signal <- struct{}{}
+		}()
+		<-signal
+		conn.Close()
+		stream.Close()
+	}()
+}
+
 func (u *upstreamListener) route(conn net.Conn) {
 	u.mu.RLock()
 	if u.tlsConfig != nil {
 		conn = tls.Server(conn, u.tlsConfig)
 	}
-	useHTTP := false
-	candidates := make([]*downstreamConnection, 0, len(u.downstream))
-	for _, d := range u.downstream {
-		candidates = append(candidates, d)
-		if d.socketDefinition.HTTP != nil {
-			useHTTP = true
-		}
-	}
 	u.mu.RUnlock()
 
-	if useHTTP {
-		go u.routeHTTP(conn)
-	} else {
-		var stream *yamux.Stream
-		var err error
+	deadline := time.Now().Add(time.Second * 30)
+	for {
+		ds := u.getDownstream()
 
-		for {
-			if len(candidates) == 0 {
+		if len(ds) == 0 {
+			if time.Now().After(deadline) {
 				conn.Close()
 				return
-			}
-			d := candidates[0]
-			stream, err = d.session.OpenStream()
-			if err != nil {
-				u.server.config.Logger.Printf("failed to open stream: %v\n", err)
-				d.session.Close()
-				u.mu.Lock()
-				delete(u.downstream, d.id)
-				u.mu.Unlock()
-				u.update()
+			} else {
+				time.Sleep(time.Millisecond * 100)
 				continue
 			}
-			break
 		}
 
-		go func() {
-			signal := make(chan struct{}, 2)
-			go func() {
-				io.Copy(stream, conn)
-				signal <- struct{}{}
-			}()
-			go func() {
-				io.Copy(conn, stream)
-				signal <- struct{}{}
-			}()
-			<-signal
-			conn.Close()
-			stream.Close()
-		}()
+		if ds[0].socketDefinition.HTTP != nil {
+			go u.routeHTTP(conn)
+		} else {
+			go u.routeTCP(conn)
+		}
+
+		break
 	}
 }
 
