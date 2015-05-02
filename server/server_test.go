@@ -89,7 +89,7 @@ func httpGet(url string) string {
 }
 
 func Test(t *testing.T) {
-	li1, err := net.Listen("tcp", "127.0.0.1:")
+	li1, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Errorf("error listening: %v", err)
 		return
@@ -177,7 +177,7 @@ func Test(t *testing.T) {
 }
 
 func TestHTTP(t *testing.T) {
-	li1, err := net.Listen("tcp", "127.0.0.1:")
+	li1, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Errorf("error listening: %v", err)
 		return
@@ -209,7 +209,7 @@ func TestHTTP(t *testing.T) {
 		Port:    8999,
 		HTTP: &protocol.SocketHTTPDefinition{
 			DomainSuffix: "",
-			PathPrefix:   "/b/",
+			PathPrefix:   "/a/b/",
 		},
 	})
 	if err != nil {
@@ -231,7 +231,7 @@ func TestHTTP(t *testing.T) {
 		return
 	}
 	// should go to the second server
-	str = httpGet("http://127.0.0.1:8999/b/")
+	str = httpGet("http://127.0.0.1:8999/a/b/")
 	if str != "b" {
 		t.Error("expected `b` got", str)
 		return
@@ -239,7 +239,7 @@ func TestHTTP(t *testing.T) {
 }
 
 func TestTLS(t *testing.T) {
-	li1, err := net.Listen("tcp", "127.0.0.1:")
+	li1, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Errorf("error listening: %v", err)
 		return

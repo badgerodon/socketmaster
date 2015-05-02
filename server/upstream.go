@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -35,7 +36,46 @@ type (
 		session          *yamux.Session
 		socketDefinition protocol.SocketDefinition
 	}
+	downstreamSorter []*downstreamConnection
 )
+
+func (ds downstreamSorter) Len() int {
+	return len(ds)
+}
+func (ds downstreamSorter) Less(i, j int) bool {
+	hi := ds[i].socketDefinition.HTTP
+	hj := ds[j].socketDefinition.HTTP
+
+	// http on top
+	if hi != nil && hj != nil {
+		domi := ds[i].socketDefinition.HTTP.DomainSuffix
+		domj := ds[j].socketDefinition.HTTP.DomainSuffix
+
+		if len(domi) > len(domj) {
+			return true
+		} else if len(domj) > len(domi) {
+			return false
+		}
+
+		pathi := ds[i].socketDefinition.HTTP.PathPrefix
+		pathj := ds[j].socketDefinition.HTTP.PathPrefix
+
+		if len(pathi) > len(pathj) {
+			return true
+		} else if len(pathj) < len(pathi) {
+			return false
+		}
+	} else if hi != nil && hj == nil {
+		return true
+	} else if hi == nil && hj != nil {
+		return false
+	}
+
+	return ds[i].id < ds[j].id
+}
+func (ds downstreamSorter) Swap(i, j int) {
+	ds[i], ds[j] = ds[j], ds[i]
+}
 
 func (u *upstreamListener) closeDownstream(id int64) {
 	u.mu.Lock()
@@ -64,13 +104,21 @@ func (u *upstreamListener) findDownstreamHTTP(req *http.Request) *downstreamConn
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
+	ds := make([]*downstreamConnection, 0, len(u.downstream))
+
 	for _, d := range u.downstream {
 		if d.socketDefinition.HTTP != nil {
 			if strings.HasSuffix(req.Host, d.socketDefinition.HTTP.DomainSuffix) &&
 				strings.HasPrefix(req.URL.Path, d.socketDefinition.HTTP.PathPrefix) {
-				return d
+				ds = append(ds, d)
 			}
 		}
+	}
+
+	sort.Sort(downstreamSorter(ds))
+
+	if len(ds) > 0 {
+		return ds[0]
 	}
 
 	return nil
