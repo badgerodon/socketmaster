@@ -62,7 +62,7 @@ func (ds downstreamSorter) Less(i, j int) bool {
 
 		if len(pathi) > len(pathj) {
 			return true
-		} else if len(pathj) < len(pathi) {
+		} else if len(pathj) > len(pathi) {
 			return false
 		}
 	} else if hi != nil && hj == nil {
